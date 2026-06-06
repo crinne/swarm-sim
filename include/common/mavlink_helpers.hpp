@@ -7,11 +7,17 @@
 namespace mavhelper
 {
 
-    // each done get its own channel to avoid the Tsan races
-    // the previous canditate hiot from sharing channel ids
+    // Keep MAVLINK_COMM_0 dedicated to GCS receive parsing. Drone IDs share
+    // the remaining channels when there are more drones than MAVLink buffers.
     inline mavlink_channel_t channel_for(uint8_t drone_id)
     {
-        return static_cast<mavlink_channel_t>(drone_id % MAVLINK_COMM_NUM_BUFFERS);
+        if constexpr (MAVLINK_COMM_NUM_BUFFERS <= 1) {
+            return MAVLINK_COMM_0;
+        }
+
+        return static_cast<mavlink_channel_t>(
+            1 + ((drone_id - 1) % (MAVLINK_COMM_NUM_BUFFERS - 1))
+        );
     }
 
     // pack a heartbeat from drone state

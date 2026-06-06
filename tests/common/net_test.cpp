@@ -1,4 +1,5 @@
 #include "common/net.hpp"
+#include "common/mavlink_helpers.hpp"
 
 #include <arpa/inet.h>
 #include <iostream>
@@ -43,6 +44,15 @@ int main()
     if (!check(!resolve_ipv4("host.invalid.invalid.", address),
                "reserved invalid hostname unexpectedly resolved")) {
         return 1;
+    }
+
+    if constexpr (MAVLINK_COMM_NUM_BUFFERS > 1) {
+        for (uint8_t id = 1; id < 16; ++id) {
+            if (!check(mavhelper::channel_for(id) != MAVLINK_COMM_0,
+                       "drone MAVLink channel collided with GCS receive channel")) {
+                return 1;
+            }
+        }
     }
 
     return 0;

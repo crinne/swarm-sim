@@ -73,9 +73,6 @@ public:
 
 private:
     Physics&  physics_;
-    uint8_t   last_seq_ = 0;
-    bool      has_last_seq_ = false;
-
     void handle_message(const mavlink_message_t& msg) {
         switch (msg.msgid) {
             case MAVLINK_MSG_ID_SET_POSITION_TARGET_LOCAL_NED:
@@ -90,14 +87,6 @@ private:
         mavlink_set_position_target_local_ned_t cmd;
         mavlink_msg_set_position_target_local_ned_decode(&msg, &cmd);
         if (cmd.target_system != physics_.state().id) return;
-
-        // stale packet detection — signed diff, not uint8_t > 240
-        if (has_last_seq_) {
-            int8_t seq_diff = static_cast<int8_t>(msg.seq - last_seq_);
-            if (seq_diff <= 0) return; // stale
-        }
-        last_seq_ = msg.seq;
-        has_last_seq_ = true;
 
         physics_.set_target({cmd.x, cmd.y, cmd.z});
     }

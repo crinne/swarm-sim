@@ -4,8 +4,10 @@
 #include "common/mavlink_helpers.hpp"
 #include "drone/physics.hpp"
 #include "mavlink/common/mavlink.h"
+#include <algorithm>
 #include <cstdint>
 #include <array>
+#include <limits>
 
 class MCU {
 public:
@@ -65,6 +67,32 @@ public:
             0,            // throttle
             s.position.z, // alt
             s.velocity.z  // climb
+        );
+        total += mavlink_msg_to_send_buffer(buf + total, &msg);
+
+        std::array<uint16_t, 10> voltages{};
+        voltages.fill(std::numeric_limits<uint16_t>::max());
+        voltages[0] = 12000;
+        std::array<uint16_t, 4> voltages_ext{};
+        int8_t battery_remaining = static_cast<int8_t>(
+            std::clamp(s.battery, 0.0f, 100.0f)
+        );
+        mavlink_msg_battery_status_pack_chan(
+            id, 0, ch, &msg,
+            0,                          // battery id
+            MAV_BATTERY_FUNCTION_ALL,
+            MAV_BATTERY_TYPE_LIPO,
+            std::numeric_limits<int16_t>::max(),
+            voltages.data(),
+            -1, -1, -1,
+            battery_remaining,
+            0,
+            battery_remaining == 0
+                ? MAV_BATTERY_CHARGE_STATE_FAILED
+                : MAV_BATTERY_CHARGE_STATE_OK,
+            voltages_ext.data(),
+            MAV_BATTERY_MODE_UNKNOWN,
+            0
         );
         total += mavlink_msg_to_send_buffer(buf + total, &msg);
 

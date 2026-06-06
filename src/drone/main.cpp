@@ -98,6 +98,10 @@ int main(int argc, char* argv[]) {
         sendto(sock, tx_buf, tx_len, 0,
                (sockaddr*)&proxy_addr, sizeof(proxy_addr));
 
+        if (physics.finished()) {
+            running = false;
+        }
+
         // 4. fixed step — sleep until next tick
         std::this_thread::sleep_until(next);
         next += TICK;

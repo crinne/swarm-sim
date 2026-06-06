@@ -1,5 +1,7 @@
 #include "gcs/gcs_engine.hpp"
 #include "gcs/websocket.hpp"
+#include "drone/mcu.hpp"
+#include "drone/physics.hpp"
 #include "httplib/httplib.h"
 
 #include <exception>
@@ -106,12 +108,31 @@ void test_http_status_and_cors()
     require(server.stop(), "GCS test server listen loop failed");
 }
 
+void test_gcs_tracks_battery_status()
+{
+    GcsEngine engine([](const SwarmSnapshot&) {});
+    Physics physics(7, {0.0f, 0.0f, 10.0f});
+    MCU mcu(physics);
+
+    physics.step(15.0f);
+
+    uint8_t buffer[256];
+    uint16_t length = mcu.send_telemetry(buffer, sizeof(buffer));
+    engine.process(buffer, length);
+
+    auto snap = engine.snapshot();
+    require(snap.drones.count(7) == 1, "GCS did not track drone 7");
+    require(snap.drones[7].battery < 100.0f,
+            "GCS did not parse battery telemetry");
+}
+
 } // namespace
 
 int main()
 {
     try {
         test_http_status_and_cors();
+        test_gcs_tracks_battery_status();
     } catch (const std::exception& error) {
         std::cerr << "FAIL: " << error.what() << '\n';
         return 1;

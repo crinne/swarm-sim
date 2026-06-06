@@ -7,6 +7,7 @@
 #include <mutex>
 #include <functional>
 #include <cmath>
+#include <chrono>
 
 // snapshot of all known drones — safe to read from websocket thread
 struct SwarmSnapshot {
@@ -61,13 +62,18 @@ public:
 
     SwarmSnapshot snapshot() {
         std::lock_guard lk(mutex_);
+        prune_stale_locked();
         return SwarmSnapshot{drones_};
     }
 
 private:
+    using Clock = std::chrono::steady_clock;
+
     SnapshotCallback              on_update_;
     std::mutex                    mutex_;
     std::map<uint8_t, DroneState> drones_;
+    std::map<uint8_t, Clock::time_point> last_seen_;
+    static constexpr auto STALE_AFTER = std::chrono::seconds(2);
 
     void handle_message(const mavlink_message_t& msg) {
         uint8_t id = msg.sysid;
@@ -79,6 +85,7 @@ private:
                 std::lock_guard lk(mutex_);
                 drones_[id].id   = id;
                 drones_[id].mode = hb.base_mode;
+                last_seen_[id] = Clock::now();
                 break;
             }
             case MAVLINK_MSG_ID_LOCAL_POSITION_NED: {
@@ -87,6 +94,7 @@ private:
                 std::lock_guard lk(mutex_);
                 drones_[id].position = {pos.x, pos.y, pos.z};
                 drones_[id].velocity = {pos.vx, pos.vy, pos.vz};
+                last_seen_[id] = Clock::now();
                 break;
             }
             case MAVLINK_MSG_ID_VFR_HUD: {
@@ -94,6 +102,18 @@ private:
                 mavlink_msg_vfr_hud_decode(&msg, &hud);
                 std::lock_guard lk(mutex_);
                 drones_[id].heading = hud.heading;
+                last_seen_[id] = Clock::now();
+                break;
+            }
+            case MAVLINK_MSG_ID_BATTERY_STATUS: {
+                mavlink_battery_status_t battery;
+                mavlink_msg_battery_status_decode(&msg, &battery);
+                std::lock_guard lk(mutex_);
+                drones_[id].id = id;
+                if (battery.battery_remaining >= 0) {
+                    drones_[id].battery = battery.battery_remaining;
+                }
+                last_seen_[id] = Clock::now();
                 break;
             }
             default:
@@ -101,6 +121,18 @@ private:
         }
 
         // notify websocket thread
-        on_update_(SwarmSnapshot{drones_});
+        on_update_(snapshot());
+    }
+
+    void prune_stale_locked() {
+        auto now = Clock::now();
+        for (auto it = last_seen_.begin(); it != last_seen_.end();) {
+            if (now - it->second > STALE_AFTER) {
+                drones_.erase(it->first);
+                it = last_seen_.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
 };

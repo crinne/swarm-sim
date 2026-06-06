@@ -85,5 +85,15 @@ int main() {
         assert(std::abs(state.velocity.y) < 0.01f);
     }
 
+    {
+        Physics physics(1, {0.0f, 0.0f, 10.0f});
+        for (int i = 0; i < 30000; ++i) {
+            physics.step(0.01f);
+        }
+
+        assert(std::abs(physics.state().battery) < 0.01f);
+        assert(physics.battery_depleted());
+    }
+
     return 0;
 }

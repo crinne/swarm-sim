@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/types.hpp"
+#include <algorithm>
 #include <cmath>
 
 class Physics {
@@ -14,6 +15,11 @@ public:
 
     // called every tick — dt is fixed 0.01f (100Hz)
     void step(float dt) {
+        if (battery_depleted()) {
+            fall(dt);
+            return;
+        }
+
         update_orbit(dt);
         move_toward_target(dt);
         update_heading(dt);
@@ -32,17 +38,33 @@ public:
     }
     const DroneState& state() const { return state_; }
     DroneState& state() { return state_; }
+    bool battery_depleted() const { return state_.battery <= 0.0f; }
+    bool finished() const {
+        return battery_depleted() && state_.position.z <= 0.0f;
+    }
 
 private:
     DroneState state_;
 
     static constexpr float MAX_SPEED    = 10.0f; // m/s
-    static constexpr float BATTERY_DRAIN = 0.001f; // % per tick
+    static constexpr float BATTERY_LIFE_SECONDS = 5.0f * 60.0f;
+    static constexpr float FALL_SPEED = 15.0f; // m/s
 
     float orbit_radius_ = 0.0f;
     float orbit_angle_  = 0.0f;
     float orbit_speed_  = 0.3f; // radians per second
     bool  orbiting_     = false;
+
+    void fall(float dt) {
+        orbiting_ = false;
+        state_.armed = false;
+        state_.mode = mavmode::PREFLIGHT;
+        state_.velocity = {0.0f, 0.0f, -FALL_SPEED};
+        state_.position.z = std::max(0.0f, state_.position.z - FALL_SPEED * dt);
+        if (state_.position.z <= 0.0f) {
+            state_.velocity = {};
+        }
+    }
 
     void update_orbit(float dt) {
         if (!orbiting_) return;
@@ -104,7 +126,14 @@ private:
     }
 
     void drain_battery(float dt) {
-        state_.battery = std::max(0.0f,
-                         state_.battery - BATTERY_DRAIN);
+        state_.battery = std::max(
+            0.0f,
+            state_.battery - (100.0f / BATTERY_LIFE_SECONDS) * dt
+        );
+        if (battery_depleted()) {
+            state_.battery = 0.0f;
+            state_.armed = false;
+            state_.mode = mavmode::PREFLIGHT;
+        }
     }
 };

@@ -126,12 +126,6 @@ int main(int argc, char* argv[]) {
                 continue;
             }
 
-            if (!proxy.within_budget(len)) {
-                std::cout << "event=packet_drop dir=gcs_to_drone "
-                             "reason=budget\n";
-                continue;
-            }
-
             // forward to all known drones
             std::lock_guard lk(endpoints_mutex);
             for (auto& [key, addr] : drone_addrs) {

@@ -88,7 +88,7 @@ int main(int argc, char *argv[])
         std::cout << "event=goto_sent id=" << (int)id
                   << " x=" << target.x
                   << " y=" << target.y
-                  << " z=" << target.z << "\n"; },
+                  << " z=" << target.z << "\n" << std::flush; },
                   allowed_origin);
     g_sse = &sse;  // let the signal handler stop the blocking listen()
 

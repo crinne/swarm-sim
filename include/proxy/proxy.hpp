@@ -18,7 +18,7 @@ class Proxy {
 public:
     explicit Proxy(uint16_t drone_port, uint16_t gcs_port,
                    float loss_pct = 0.0f,
-                   uint32_t bw_limit_bps = 32 * 1024)
+                   uint32_t bw_limit_bps = 512 * 1024)
         : loss_pct_(loss_pct)
         , bw_limit_bps_(bw_limit_bps)
         , bytes_this_second_(0)

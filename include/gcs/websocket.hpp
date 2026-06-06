@@ -8,6 +8,7 @@
 #include <vector>
 #include <functional>
 #include <utility>
+#include <unordered_set>
 
 class SseServer {
 public:
@@ -17,11 +18,12 @@ public:
                        std::string allowed_origin)
         : engine_(engine), on_goto_(std::move(on_goto)),
           allowed_origin_(std::move(allowed_origin)) {
+        parse_allowed_origins();
 
         // telemetry stream
         server_.Get("/telemetry", [this](const httplib::Request& req,
                                          httplib::Response& res) {
-            add_cors(res);
+            add_cors(req, res);
             res.set_header("Cache-Control", "no-cache");
             res.set_chunked_content_provider(
                 "text/event-stream",
@@ -40,7 +42,7 @@ public:
         // GOTO command
         server_.Post("/goto", [this](const httplib::Request& req,
                                      httplib::Response& res) {
-            add_cors(res);
+            add_cors(req, res);
             // parse simple JSON: {"id":1,"x":10,"y":20,"z":5}
             uint8_t id = 0;
             float x = 0, y = 0, z = 0;
@@ -51,22 +53,22 @@ public:
             res.set_content("{\"ok\":true}", "application/json");
         });
 
-        server_.Get("/health", [this](const httplib::Request&,
+        server_.Get("/health", [this](const httplib::Request& req,
                                       httplib::Response& res) {
-            add_cors(res);
+            add_cors(req, res);
             res.set_content("{\"status\":\"ok\"}", "application/json");
         });
 
-        server_.Get("/ready", [this](const httplib::Request&,
+        server_.Get("/ready", [this](const httplib::Request& req,
                                      httplib::Response& res) {
-            add_cors(res);
+            add_cors(req, res);
             res.set_content("{\"status\":\"ready\"}", "application/json");
         });
 
         // CORS preflight
-        server_.Options(".*", [this](const httplib::Request&,
+        server_.Options(".*", [this](const httplib::Request& req,
                                      httplib::Response& res) {
-            add_cors(res);
+            add_cors(req, res);
             res.set_header("Access-Control-Allow-Methods",
                            "GET, POST, OPTIONS");
             res.set_header("Access-Control-Allow-Headers",
@@ -102,9 +104,33 @@ private:
     GcsEngine&      engine_;
     GotoCallback    on_goto_;
     std::string     allowed_origin_;
+    std::vector<std::string> allowed_origins_;
+    std::unordered_set<std::string> allowed_origin_set_;
 
-    void add_cors(httplib::Response& res) const {
-        res.set_header("Access-Control-Allow-Origin", allowed_origin_);
+    void parse_allowed_origins() {
+        std::stringstream stream(allowed_origin_);
+        std::string origin;
+        while (std::getline(stream, origin, ',')) {
+            auto start = origin.find_first_not_of(" \t\r\n");
+            auto end = origin.find_last_not_of(" \t\r\n");
+            if (start == std::string::npos) continue;
+            origin = origin.substr(start, end - start + 1);
+            allowed_origins_.push_back(origin);
+            allowed_origin_set_.insert(origin);
+        }
+        if (allowed_origins_.empty()) {
+            allowed_origins_.push_back(allowed_origin_);
+            allowed_origin_set_.insert(allowed_origin_);
+        }
+    }
+
+    void add_cors(const httplib::Request& req, httplib::Response& res) const {
+        auto origin = req.get_header_value("Origin");
+        if (!origin.empty() && allowed_origin_set_.count(origin) > 0) {
+            res.set_header("Access-Control-Allow-Origin", origin);
+        } else if (origin.empty()) {
+            res.set_header("Access-Control-Allow-Origin", allowed_origins_.front());
+        }
         res.set_header("Vary", "Origin");
     }
 

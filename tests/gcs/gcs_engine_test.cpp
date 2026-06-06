@@ -21,7 +21,8 @@ class ServerRunner {
 public:
     ServerRunner()
         : engine_([](const SwarmSnapshot&) {}),
-          server_(engine_, [](uint8_t, Vec3) {}, "https://swarmgcs.dev")
+          server_(engine_, [](uint8_t, Vec3) {},
+                  "https://swarmgcs.dev,https://www.swarmgcs.dev")
     {
         port_ = server_.bind_to_any_port("127.0.0.1");
         require(port_ > 0, "failed to bind GCS test server");
@@ -79,6 +80,13 @@ void test_http_status_and_cors()
     require(health->get_header_value("Access-Control-Allow-Origin")
                 == "https://swarmgcs.dev",
             "GET /health returned an unexpected allowed origin");
+
+    httplib::Headers www_origin = {{"Origin", "https://www.swarmgcs.dev"}};
+    auto www_health = client.Get("/health", www_origin);
+    require(www_health, "GET /health with www origin did not return a response");
+    require(www_health->get_header_value("Access-Control-Allow-Origin")
+                == "https://www.swarmgcs.dev",
+            "GET /health did not echo the www allowed origin");
 
     auto ready = client.Get("/ready");
     require(ready, "GET /ready did not return a response");
